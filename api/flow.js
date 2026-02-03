@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { initializeDatabase, saveSurveyResponse } = require('./db/postgres');
+const { getPhoneNumberFromChatwoot } = require('./chatwoot');
 
 let dbInitialized = false;
 
@@ -95,11 +96,28 @@ module.exports = async (req, res) => {
 
       if (action === 'data_exchange') {
         console.log('Data exchange - Survey data received');
+        console.log('Flow Token:', flow_token);
         
-        // Save to database
+        // CRITICAL: Fetch phone number from Chatwoot using flow_token
+        let phoneNumber = null;
         try {
-          const savedResponse = await saveSurveyResponse(flow_token, data);
+          console.log('🔍 Fetching phone number from Chatwoot...');
+          phoneNumber = await getPhoneNumberFromChatwoot(flow_token);
+          
+          if (phoneNumber) {
+            console.log(`✅ Phone number retrieved: ${phoneNumber}`);
+          } else {
+            console.log('⚠️  Could not retrieve phone number from Chatwoot');
+          }
+        } catch (chatwootError) {
+          console.error('❌ Chatwoot API error:', chatwootError.message);
+        }
+        
+        // Save to database (with or without phone number)
+        try {
+          const savedResponse = await saveSurveyResponse(flow_token, data, phoneNumber);
           console.log('Database ID:', savedResponse.id);
+          console.log('Phone Number:', phoneNumber || 'NOT AVAILABLE');
         } catch (dbError) {
           console.error('Database save error:', dbError);
           // Continue to send response even if DB save fails

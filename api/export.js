@@ -32,8 +32,8 @@ function convertToCSV(data) {
 
   const rows = data.map(row => [
     row.id,
-    new Date(row.created_at).toLocaleDateString('fr-FR'),
-    new Date(row.created_at).toLocaleTimeString('fr-FR'),
+    new Date(row.submission_timestamp || row.created_at).toLocaleDateString('fr-FR'),
+    new Date(row.submission_timestamp || row.created_at).toLocaleTimeString('fr-FR'),
     row.phone_number || '',
     formatValue(row.q1_rating),
     row.q1_comment || '',
@@ -54,7 +54,7 @@ function convertToCSV(data) {
     row.week_number || '',
     row.month || '',
     row.year || '',
-    row.hour_of_day || ''
+    row.submission_hour || ''
   ]);
 
   const csvContent = [

@@ -10,11 +10,23 @@ async function migrate() {
   console.log('Dropping old table...');
   await sql`DROP TABLE IF EXISTS survey_responses`;
   
+  // Create flow_token_mapping table
+  console.log('Creating flow_token_mapping table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS flow_token_mapping (
+      flow_token VARCHAR(255) PRIMARY KEY,
+      phone_number VARCHAR(50) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      used BOOLEAN DEFAULT FALSE
+    )
+  `;
+  
   // Create new table with correct schema
   console.log('Creating new table with updated schema...');
   await sql`
     CREATE TABLE survey_responses (
       id SERIAL PRIMARY KEY,
+      submission_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       flow_token VARCHAR(255),
       phone_number VARCHAR(50),

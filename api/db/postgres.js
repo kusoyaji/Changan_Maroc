@@ -75,6 +75,74 @@ function getWeekNumber(date) {
   return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
 }
 
+/**
+ * Store flow_token to phone_number mapping BEFORE sending Flow
+ * This is how we link phone numbers to Flow responses
+ */
+async function storeFlowToken(flowToken, phoneNumber) {
+  if (!sql) {
+    console.log('⚠️  Database not configured');
+    return { stored: false };
+  }
+  
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS flow_token_mapping (
+        flow_token VARCHAR(255) PRIMARY KEY,
+        phone_number VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        used BOOLEAN DEFAULT FALSE
+      )
+    `;
+    
+    const result = await sql`
+      INSERT INTO flow_token_mapping (flow_token, phone_number)
+      VALUES (${flowToken}, ${phoneNumber})
+      RETURNING flow_token, phone_number
+    `;
+    
+    console.log(`✅ Stored flow token mapping in database`);
+    return { stored: true, ...result[0] };
+  } catch (error) {
+    console.error('❌ Error storing flow token:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get phone number from flow_token mapping
+ */
+async function getPhoneFromToken(flowToken) {
+  if (!sql) {
+    return null;
+  }
+  
+  try {
+    const result = await sql`
+      SELECT phone_number, created_at
+      FROM flow_token_mapping
+      WHERE flow_token = ${flowToken}
+      LIMIT 1
+    `;
+    
+    if (result.length > 0) {
+      // Mark as used
+      await sql`
+        UPDATE flow_token_mapping
+        SET used = TRUE
+        WHERE flow_token = ${flowToken}
+      `;
+      
+      return result[0].phone_number;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ Error getting phone from token:', error);
+    return null;
+  }
+}
+
 async function initializeDatabase() {
   if (!sql) {
     console.log('⚠️  Database not configured - set DATABASE_URL environment variable');
@@ -84,10 +152,20 @@ async function initializeDatabase() {
   const sqlClient = neon(process.env.DATABASE_URL);
   
   try {
+    // Create flow_token_mapping table
+    await sqlClient`
+      CREATE TABLE IF NOT EXISTS flow_token_mapping (
+        flow_token VARCHAR(255) PRIMARY KEY,
+        phone_number VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        used BOOLEAN DEFAULT FALSE
+      )
+    `;
+    
     await sqlClient`
       CREATE TABLE IF NOT EXISTS survey_responses (
         id SERIAL PRIMARY KEY,
-        submission_timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+        submission_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         flow_token VARCHAR(255),
         phone_number VARCHAR(50),
@@ -121,6 +199,37 @@ async function initializeDatabase() {
       );
     `;
     
+    // Try to add submission_timestamp column if it doesn't exist (allow NULL initially)
+    try {
+      await sqlClient`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name='survey_responses' AND column_name='submission_timestamp'
+          ) THEN
+            ALTER TABLE survey_responses 
+            ADD COLUMN submission_timestamp TIMESTAMP WITH TIME ZONE;
+            
+            -- Backfill with created_at
+            UPDATE survey_responses 
+            SET submission_timestamp = created_at 
+            WHERE submission_timestamp IS NULL;
+            
+            -- Make it NOT NULL with default
+            ALTER TABLE survey_responses 
+            ALTER COLUMN submission_timestamp SET NOT NULL;
+            
+            ALTER TABLE survey_responses 
+            ALTER COLUMN submission_timestamp SET DEFAULT NOW();
+          END IF;
+        END $$;
+      `;
+      console.log('✅ Added and configured submission_timestamp column');
+    } catch (alterError) {
+      console.log('ℹ️  submission_timestamp column configuration:', alterError.message);
+    }
+    
     console.log('✅ Database table initialized');
     return true;
   } catch (error) {
@@ -129,7 +238,7 @@ async function initializeDatabase() {
   }
 }
 
-async function saveSurveyResponse(flowToken, data) {
+async function saveSurveyResponse(flowToken, data, providedPhoneNumber = null) {
   if (!sql) {
     console.log('⚠️  Database not configured');
     return { id: null };
@@ -141,6 +250,18 @@ async function saveSurveyResponse(flowToken, data) {
     const sentiment = calculateSentiment(data);
     const needs_followup_flag = needsFollowup(data);
     
+    // Try to get phone number from multiple sources:
+    // 1. Provided directly (from Chatwoot)
+    // 2. From flow_token mapping (if sent via /api/send-flow)
+    let phoneNumber = providedPhoneNumber;
+    
+    if (!phoneNumber) {
+      phoneNumber = await getPhoneFromToken(flowToken);
+      console.log(`📞 Retrieved phone number from flow_token mapping: ${phoneNumber || 'NOT FOUND'}`);
+    } else {
+      console.log(`📞 Using phone number from Chatwoot: ${phoneNumber}`);
+    }
+    
     // NPS based on q5 (brand recommendation)
     const brandRating = data.q5_rating;
     const is_promoter = !!(brandRating === '5_etoiles' || brandRating === '4_etoiles');
@@ -148,6 +269,7 @@ async function saveSurveyResponse(flowToken, data) {
     
     const result = await sql`
       INSERT INTO survey_responses (
+        submission_timestamp,
         created_at,
         flow_token,
         phone_number,
@@ -175,8 +297,9 @@ async function saveSurveyResponse(flowToken, data) {
         raw_data
       ) VALUES (
         ${now.toISOString()},
+        ${now.toISOString()},
         ${flowToken || 'unknown'},
-        ${flowToken || null},
+        ${phoneNumber || null},
         ${data.q1_rating || null},
         ${data.q1_comment || null},
         ${data.q2_rating || null},
@@ -230,7 +353,7 @@ async function getRecentResponses(limit = 50) {
     const responses = await sql`
       SELECT 
         id,
-        created_at as timestamp,
+        submission_timestamp as timestamp,
         phone_number,
         q1_rating,
         q1_comment,
@@ -248,14 +371,14 @@ async function getRecentResponses(limit = 50) {
         needs_followup,
         sentiment
       FROM survey_responses
-      ORDER BY created_at DESC
+      ORDER BY submission_timestamp DESC
       LIMIT ${limit}
     `;
     
     return responses.map(r => ({
       id: r.id,
       timestamp: r.timestamp,
-      phone: r.phone_number,
+      phone_number: r.phone_number,
       responses: {
         q1_rating: r.q1_rating,
         q1_comment: r.q1_comment,
@@ -299,7 +422,7 @@ async function getStats() {
     const stats = await sql`
       SELECT 
         COUNT(*) as total,
-        COUNT(*) FILTER (WHERE DATE(created_at) = ${today}) as today,
+        COUNT(*) FILTER (WHERE DATE(submission_timestamp) = ${today}) as today,
         AVG(satisfaction_score) as avg_satisfaction,
         COUNT(*) FILTER (WHERE is_promoter = true) as promoters,
         COUNT(*) FILTER (WHERE is_detractor = true) as detractors,
@@ -332,10 +455,47 @@ async function getStats() {
   }
 }
 
+/**
+ * Update phone number for an existing survey response
+ * Links phone number to Flow submission via flow_token
+ */
+async function updatePhoneNumber(flowToken, phoneNumber) {
+  if (!sql) {
+    console.log('⚠️  Database not configured');
+    return { updated: false };
+  }
+  
+  try {
+    console.log(`Attempting to update flow_token: ${flowToken} with phone: ${phoneNumber}`);
+    
+    const result = await sql`
+      UPDATE survey_responses
+      SET phone_number = ${phoneNumber}
+      WHERE flow_token = ${flowToken}
+        AND phone_number IS NULL
+      RETURNING id, created_at, phone_number
+    `;
+    
+    if (result.length > 0) {
+      console.log(`✅ Updated response ID ${result[0].id} with phone number`);
+      return { updated: true, id: result[0].id };
+    } else {
+      console.log(`⚠️  No matching flow_token found or phone already set`);
+      return { updated: false };
+    }
+  } catch (error) {
+    console.error('❌ Error updating phone number:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   initializeDatabase,
   saveSurveyResponse,
   getAllResponses,
   getRecentResponses,
-  getStats
+  getStats,
+  updatePhoneNumber,
+  storeFlowToken,
+  getPhoneFromToken
 };

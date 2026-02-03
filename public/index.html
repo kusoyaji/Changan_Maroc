@@ -169,7 +169,23 @@
             document.getElementById('avgSatisfaction').textContent = Math.round((stats.avgSatisfaction || 0) * 100) + '%';
             document.getElementById('needsFollowup').textContent = stats.needsFollowup || 0;
             
-            const lastResp = responses[0] ? new Date(responses[0].timestamp).toLocaleString('fr-FR') : 'None';
+            let lastResp = 'None';
+            if (responses && responses.length > 0 && responses[0].timestamp) {
+                try {
+                    const date = new Date(responses[0].timestamp);
+                    if (!isNaN(date.getTime())) {
+                        lastResp = date.toLocaleString('fr-FR', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                    }
+                } catch (e) {
+                    lastResp = 'Invalid Date';
+                }
+            }
             document.getElementById('lastResponse').textContent = lastResp;
         }
 
@@ -183,13 +199,35 @@
             
             const formatRating = (rating) => {
                 const map = {
-                    '5_etoiles': '⭐⭐⭐⭐⭐',
-                    '4_etoiles': '⭐⭐⭐⭐',
-                    '3_etoiles': '⭐⭐⭐',
-                    '2_etoiles': '⭐⭐',
-                    '1_etoile': '⭐'
+                    '5_etoiles': '5 étoiles',
+                    '4_etoiles': '4 étoiles',
+                    '3_etoiles': '3 étoiles',
+                    '2_etoiles': '2 étoiles',
+                    '1_etoile': '1 étoile'
                 };
                 return map[rating] || '-';
+            };
+            
+            const formatDate = (dateString) => {
+                if (!dateString) return 'Invalid Date';
+                try {
+                    const date = new Date(dateString);
+                    if (isNaN(date.getTime())) return 'Invalid Date';
+                    return date.toLocaleString('fr-FR', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                } catch (e) {
+                    return 'Invalid Date';
+                }
+            };
+            
+            const formatSatisfaction = (score) => {
+                if (score === null || score === undefined) return '0%';
+                return Math.round(score * 100) + '%';
             };
             
             const table = `
@@ -197,6 +235,7 @@
                     <thead>
                         <tr>
                             <th>Date</th>
+                            <th>Phone</th>
                             <th>Satisfaction</th>
                             <th>Q1 Accueil</th>
                             <th>Q2 Livraison</th>
@@ -209,14 +248,15 @@
                     <tbody>
                         ${responses.map(r => `
                             <tr>
-                                <td>${new Date(r.timestamp).toLocaleString('fr-FR')}</td>
-                                <td>${Math.round((r.analytics.satisfaction_score || 0) * 100)}%</td>
-                                <td>${formatRating(r.responses.q1_rating)}</td>
-                                <td>${formatRating(r.responses.q2_rating)}</td>
-                                <td>${r.responses.q3_followup === 'oui' ? 'Oui' : 'Non'}</td>
-                                <td>${formatRating(r.responses.q4_rating)}</td>
-                                <td>${formatRating(r.responses.q5_rating)}</td>
-                                <td>${r.analytics.sentiment || '-'}</td>
+                                <td>${formatDate(r.timestamp)}</td>
+                                <td>${r.phone_number || 'N/A'}</td>
+                                <td>${formatSatisfaction(r.analytics?.satisfaction_score)}</td>
+                                <td>${formatRating(r.responses?.q1_rating)}</td>
+                                <td>${formatRating(r.responses?.q2_rating)}</td>
+                                <td>${r.responses?.q3_followup === 'oui' ? 'Oui' : r.responses?.q3_followup === 'non' ? 'Non' : '-'}</td>
+                                <td>${formatRating(r.responses?.q4_rating)}</td>
+                                <td>${formatRating(r.responses?.q5_rating)}</td>
+                                <td>${r.analytics?.sentiment || '-'}</td>
                             </tr>
                         `).join('')}
                     </tbody>

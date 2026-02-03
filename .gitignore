@@ -6,3 +6,4 @@ private-key.pem
 public-key.pem
 .DS_Store
 .vercel
+.env*.local

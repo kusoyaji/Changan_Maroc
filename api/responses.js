@@ -13,8 +13,8 @@ module.exports = async (req, res) => {
         stats, 
         responses: responses.map(r => ({
           id: r.id,
-          timestamp: r.submission_timestamp,
-          phone: r.flow_token,
+          timestamp: r.timestamp,
+          phone_number: r.phone_number || 'N/A',
           responses: {
             q1_rating: r.q1_rating,
             q1_comment: r.q1_comment,
