@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Changan Maroc Survey Analytics</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .stat-card h3 {
+            color: #666;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+        .stat-card .value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+        .data-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .export-btn {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .export-btn:hover {
+            background: #059669;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            overflow-x: auto;
+            display: block;
+        }
+        thead, tbody {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .nps-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .nps-card h3 {
+            color: rgba(255,255,255,0.9);
+        }
+        .nps-card .value {
+            color: white;
+        }
+        .followup-card {
+            background: #fef3c7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Changan Maroc - Survey Analytics</h1>
+            <p>Real-time customer satisfaction insights</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Responses</h3>
+                <div class="value" id="totalResponses">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Today</h3>
+                <div class="value" id="todayResponses">-</div>
+            </div>
+            <div class="stat-card nps-card">
+                <h3>NPS Score</h3>
+                <div class="value" id="npsScore">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Avg Satisfaction</h3>
+                <div class="value" id="avgSatisfaction">-</div>
+            </div>
+            <div class="stat-card followup-card">
+                <h3>Needs Followup</h3>
+                <div class="value" id="needsFollowup">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Last Response</h3>
+                <div class="value" style="font-size: 1.2rem;" id="lastResponse">-</div>
+            </div>
+        </div>
+
+        <div class="data-section">
+            <button class="export-btn" onclick="exportToExcel()">Export to Excel</button>
+            <div id="dataContainer" class="loading">Loading data...</div>
+        </div>
+    </div>
+
+    <script>
+        async function loadData() {
+            try {
+                const response = await fetch('/api/responses');
+                const json = await response.json();
+                
+                updateStats(json.stats, json.responses);
+                displayTable(json.responses);
+            } catch (error) {
+                document.getElementById('dataContainer').innerHTML = 
+                    '<p style="color: red;">Error loading data: ' + error.message + '</p>';
+            }
+        }
+
+        function updateStats(stats, responses) {
+            document.getElementById('totalResponses').textContent = stats.total || 0;
+            document.getElementById('todayResponses').textContent = stats.today || 0;
+            document.getElementById('npsScore').textContent = stats.nps || 0;
+            document.getElementById('avgSatisfaction').textContent = Math.round((stats.avgSatisfaction || 0) * 100) + '%';
+            document.getElementById('needsFollowup').textContent = stats.needsFollowup || 0;
+            
+            const lastResp = responses[0] ? new Date(responses[0].timestamp).toLocaleString('fr-FR') : 'None';
+            document.getElementById('lastResponse').textContent = lastResp;
+        }
+
+        function displayTable(responses) {
+            const container = document.getElementById('dataContainer');
+            
+            if (responses.length === 0) {
+                container.innerHTML = '<p>No responses yet.</p>';
+                return;
+            }
+            
+            const formatRating = (rating) => {
+                const map = {
+                    '5_etoiles': '⭐⭐⭐⭐⭐',
+                    '4_etoiles': '⭐⭐⭐⭐',
+                    '3_etoiles': '⭐⭐⭐',
+                    '2_etoiles': '⭐⭐',
+                    '1_etoile': '⭐'
+                };
+                return map[rating] || '-';
+            };
+            
+            const table = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Satisfaction</th>
+                            <th>Q1 Accueil</th>
+                            <th>Q2 Livraison</th>
+                            <th>Q3 Suivi 48h</th>
+                            <th>Q4 Conseiller</th>
+                            <th>Q5 Marque</th>
+                            <th>Sentiment</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${responses.map(r => `
+                            <tr>
+                                <td>${new Date(r.timestamp).toLocaleString('fr-FR')}</td>
+                                <td>${Math.round((r.analytics.satisfaction_score || 0) * 100)}%</td>
+                                <td>${formatRating(r.responses.q1_rating)}</td>
+                                <td>${formatRating(r.responses.q2_rating)}</td>
+                                <td>${r.responses.q3_followup === 'oui' ? 'Oui' : 'Non'}</td>
+                                <td>${formatRating(r.responses.q4_rating)}</td>
+                                <td>${formatRating(r.responses.q5_rating)}</td>
+                                <td>${r.analytics.sentiment || '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            container.innerHTML = table;
+        }
+
+        function exportToExcel() {
+            window.location.href = '/api/export';
+        }
+
+        loadData();
+        setInterval(loadData, 10000); // Refresh every 10 seconds
+    </script>
+</body>
+</html>

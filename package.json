@@ -1,0 +1,16 @@
+{
+  "name": "changan-maroc-webhook",
+  "version": "1.0.0",
+  "description": "WhatsApp Flow Survey System for Changan Maroc",
+  "main": "api/flow.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
