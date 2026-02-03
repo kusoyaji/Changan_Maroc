@@ -2,7 +2,7 @@
 # This script uses the /api/send-flow endpoint to send Flow and store phone number
 
 $vercelUrl = "https://changansurvey.vercel.app"
-$recipientPhone = "+212610059159"  # YOUR PHONE NUMBER
+$recipientPhone = "+212639085462"  # YOUR PHONE NUMBER
 $customerName = "Test User"
 
 Write-Host "Sending Flow with phone number storage..." -ForegroundColor Cyan
