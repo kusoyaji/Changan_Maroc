@@ -9,32 +9,10 @@ module.exports = async (req, res) => {
       const responses = await getRecentResponses(50);
       const stats = await getStats();
       
+      // getRecentResponses already returns the properly structured data
       return res.status(200).json({ 
         stats, 
-        responses: responses.map(r => ({
-          id: r.id,
-          timestamp: r.timestamp,
-          phone_number: r.phone_number || 'N/A',
-          responses: {
-            q1_rating: r.q1_rating,
-            q1_comment: r.q1_comment,
-            q2_rating: r.q2_rating,
-            q2_comment: r.q2_comment,
-            q3_followup: r.q3_followup,
-            q4_rating: r.q4_rating,
-            q4_comment: r.q4_comment,
-            q5_rating: r.q5_rating,
-            q5_comment: r.q5_comment,
-            final_comments: r.final_comments
-          },
-          analytics: {
-            satisfaction_score: r.satisfaction_score,
-            sentiment: r.sentiment,
-            is_promoter: r.is_promoter,
-            is_detractor: r.is_detractor,
-            needs_followup: r.needs_followup
-          }
-        }))
+        responses
       });
     } catch (error) {
       console.error('Error fetching responses:', error);

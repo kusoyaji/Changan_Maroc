@@ -323,14 +323,14 @@ async function saveSurveyResponse(flowToken, data, providedPhoneNumber = null) {
         ${now.getFullYear()},
         ${JSON.stringify(data)}
       )
-      RETURNING id, satisfaction_score, sentiment, is_promoter, is_detractor, needs_followup
+      RETURNING id, phone_number, satisfaction_score, sentiment, is_promoter, is_detractor, needs_followup
     `;
     
     console.log('✅ Saved to database:', result[0]);
     return result[0];
   } catch (error) {
     console.error('❌ Database save error:', error);
-    return { id: null };
+    return { id: null, phone_number: null };
   }
 }
 

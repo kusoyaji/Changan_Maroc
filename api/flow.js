@@ -116,10 +116,11 @@ module.exports = async (req, res) => {
         // Save to database (with or without phone number)
         try {
           const savedResponse = await saveSurveyResponse(flow_token, data, phoneNumber);
+          console.log('✅ Saved to database:', savedResponse);
           console.log('Database ID:', savedResponse.id);
-          console.log('Phone Number:', phoneNumber || 'NOT AVAILABLE');
+          console.log('Phone Number:', savedResponse.phone_number || phoneNumber || 'NOT AVAILABLE');
         } catch (dbError) {
-          console.error('Database save error:', dbError);
+          console.error('❌ Database save error:', dbError);
           // Continue to send response even if DB save fails
         }
 
