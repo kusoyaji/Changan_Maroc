@@ -154,9 +154,17 @@
                 const response = await fetch('/api/responses');
                 const json = await response.json();
                 
+                console.log('📥 Received data:', json);
+                console.log('📊 Stats:', json.stats);
+                console.log('📋 Responses count:', json.responses?.length);
+                if (json.responses && json.responses.length > 0) {
+                    console.log('🔍 First response:', json.responses[0]);
+                }
+                
                 updateStats(json.stats, json.responses);
                 displayTable(json.responses);
             } catch (error) {
+                console.error('❌ Error loading data:', error);
                 document.getElementById('dataContainer').innerHTML = 
                     '<p style="color: red;">Error loading data: ' + error.message + '</p>';
             }
@@ -235,7 +243,8 @@
                     <thead>
                         <tr>
                             <th>Date</th>
-                            <th>Phone</th>
+                            <th>Client</th>
+                            <th>Téléphone</th>
                             <th>Satisfaction</th>
                             <th>Q1 Accueil</th>
                             <th>Q2 Livraison</th>
@@ -249,6 +258,7 @@
                         ${responses.map(r => `
                             <tr>
                                 <td>${formatDate(r.timestamp)}</td>
+                                <td>${r.customer_name || 'N/A'}</td>
                                 <td>${r.phone_number || 'N/A'}</td>
                                 <td>${formatSatisfaction(r.analytics?.satisfaction_score)}</td>
                                 <td>${formatRating(r.responses?.q1_rating)}</td>

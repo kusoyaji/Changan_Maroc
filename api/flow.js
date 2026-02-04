@@ -1,8 +1,67 @@
 const crypto = require('crypto');
 const { initializeDatabase, saveSurveyResponse } = require('./db/postgres');
-const { getPhoneNumberFromChatwoot } = require('./chatwoot');
+const { getPhoneNumberFromChatwoot, searchChatwootContactByPhone } = require('./chatwoot');
 
 let dbInitialized = false;
+
+/**
+ * Get phone number and customer name from Chatwoot conversation mapping
+ * This is populated by the Chatwoot webhook when messages are created
+ * IMPROVED: Also fetches customer name from Chatwoot contact database
+ */
+async function getPhoneFromChatwootConversation(flowToken) {
+  const { neon } = require('@neondatabase/serverless');
+  const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
+  
+  if (!sql) return null;
+  
+  try {
+    // Look for recent conversations (last 5 minutes) with phone numbers
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    
+    const result = await sql`
+      SELECT phone_number, customer_name, created_at
+      FROM chatwoot_conversation_mapping
+      WHERE created_at >= ${fiveMinutesAgo}
+        AND used = FALSE
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    
+    if (result.length > 0) {
+      const phoneNumber = result[0].phone_number;
+      let customerName = result[0].customer_name;
+      
+      // If no name in mapping, try fetching from Chatwoot contact database
+      if (!customerName && phoneNumber) {
+        console.log('🔍 No name in mapping, searching Chatwoot contacts...');
+        const contact = await searchChatwootContactByPhone(phoneNumber);
+        if (contact && contact.name) {
+          console.log(`✅ Found name in Chatwoot contacts: ${contact.name}`);
+          customerName = contact.name;
+        }
+      }
+      
+      // Mark as used
+      await sql`
+        UPDATE chatwoot_conversation_mapping
+        SET used = TRUE
+        WHERE phone_number = ${phoneNumber}
+          AND created_at = ${result[0].created_at}
+      `;
+      
+      return {
+        phone_number: phoneNumber,
+        customer_name: customerName
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting phone from Chatwoot conversation:', error);
+    return null;
+  }
+}
 
 function decryptRequest(encryptedBody, privateKey, passphrase = '') {
   const { encrypted_aes_key, encrypted_flow_data, initial_vector } = encryptedBody;
@@ -98,27 +157,82 @@ module.exports = async (req, res) => {
         console.log('Data exchange - Survey data received');
         console.log('Flow Token:', flow_token);
         
-        // CRITICAL: Fetch phone number from Chatwoot using flow_token
+        // MULTI-STRATEGY PHONE NUMBER AND NAME CAPTURE (Guaranteed!)
         let phoneNumber = null;
+        let customerName = null;
+        
+        // Strategy 1: From flow_token mapping (when sent via /api/send-flow)
         try {
-          console.log('🔍 Fetching phone number from Chatwoot...');
-          phoneNumber = await getPhoneNumberFromChatwoot(flow_token);
-          
-          if (phoneNumber) {
-            console.log(`✅ Phone number retrieved: ${phoneNumber}`);
-          } else {
-            console.log('⚠️  Could not retrieve phone number from Chatwoot');
+          const { getPhoneFromToken } = require('./db/postgres');
+          const tokenData = await getPhoneFromToken(flow_token);
+          if (tokenData) {
+            phoneNumber = tokenData.phone_number;
+            customerName = tokenData.customer_name;
+            console.log(`✅ Strategy 1 - From flow_token: ${phoneNumber} (${customerName || 'No name'})`);
           }
-        } catch (chatwootError) {
-          console.error('❌ Chatwoot API error:', chatwootError.message);
+        } catch (error) {
+          console.log('⚠️  Strategy 1 failed:', error.message);
         }
         
-        // Save to database (with or without phone number)
+        // Strategy 2: From Chatwoot conversation mapping (Chatwoot webhook)
+        if (!phoneNumber) {
+          try {
+            const conversationData = await getPhoneFromChatwootConversation(flow_token);
+            if (conversationData) {
+              phoneNumber = conversationData.phone_number;
+              customerName = customerName || conversationData.customer_name;
+              console.log(`✅ Strategy 2 - From Chatwoot conversation: ${phoneNumber} (${customerName || 'No name'})`);
+            }
+          } catch (error) {
+            console.log('⚠️  Strategy 2 failed:', error.message);
+          }
+        }
+        
+        // Strategy 3: From Chatwoot API search (fallback)
+        if (!phoneNumber) {
+          try {
+            console.log('🔍 Strategy 3 - Searching Chatwoot API...');
+            phoneNumber = await getPhoneNumberFromChatwoot(flow_token);
+            if (phoneNumber) {
+              console.log(`✅ Strategy 3 - From Chatwoot API: ${phoneNumber}`);
+            } else {
+              console.log('⚠️  Strategy 3 - Could not retrieve phone from Chatwoot');
+            }
+          } catch (chatwootError) {
+            console.error('❌ Strategy 3 failed:', chatwootError.message);
+          }
+        }
+        
+        // CRITICAL: If we have phone but no name, search Chatwoot contacts
+        if (phoneNumber && !customerName) {
+          try {
+            console.log('🔍 No name yet, searching Chatwoot contacts database...');
+            const { searchChatwootContactByPhone } = require('./chatwoot');
+            const contact = await searchChatwootContactByPhone(phoneNumber);
+            if (contact && contact.name) {
+              customerName = contact.name;
+              console.log(`✅ Found name in Chatwoot: ${customerName}`);
+            } else {
+              console.log('⚠️  No name found in Chatwoot contacts');
+            }
+          } catch (error) {
+            console.error('❌ Chatwoot contact search failed:', error.message);
+          }
+        }
+        
+        if (phoneNumber) {
+          console.log(`📞 FINAL: ${phoneNumber} (${customerName || 'No name'})`);
+        } else {
+          console.log('⚠️  WARNING: No phone number captured! Check Chatwoot webhook.');
+        }
+        
+        // Save to database (with or without phone number and customer name)
         try {
-          const savedResponse = await saveSurveyResponse(flow_token, data, phoneNumber);
+          const savedResponse = await saveSurveyResponse(flow_token, data, phoneNumber, customerName);
           console.log('✅ Saved to database:', savedResponse);
           console.log('Database ID:', savedResponse.id);
-          console.log('Phone Number:', savedResponse.phone_number || phoneNumber || 'NOT AVAILABLE');
+          console.log('Phone Number:', savedResponse.phone_number || 'NOT AVAILABLE');
+          console.log('Customer Name:', savedResponse.customer_name || 'NOT AVAILABLE');
         } catch (dbError) {
           console.error('❌ Database save error:', dbError);
           // Continue to send response even if DB save fails

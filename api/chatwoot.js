@@ -195,8 +195,73 @@ function extractPhoneFromWhatsAppId(whatsappId) {
   return null;
 }
 
+/**
+ * Search for contact by phone number in Chatwoot
+ * Returns contact object with name, phone, id
+ */
+async function searchChatwootContactByPhone(phoneNumber) {
+  const accessToken = process.env.CHATWOOT_ACCESS_TOKEN;
+  
+  if (!accessToken) {
+    console.log('⚠️  CHATWOOT_ACCESS_TOKEN not configured');
+    return null;
+  }
+  
+  if (!phoneNumber) {
+    return null;
+  }
+  
+  try {
+    // Clean phone number for search
+    const cleanPhone = phoneNumber.replace(/[+\s-]/g, '');
+    
+    console.log(`🔍 Searching Chatwoot for contact: ${phoneNumber}`);
+    
+    const searchUrl = `${CHATWOOT_BASE_URL}/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/contacts/search`;
+    const searchParams = new URLSearchParams({
+      q: cleanPhone,
+      page: 1
+    });
+    
+    const response = await fetch(`${searchUrl}?${searchParams}`, {
+      headers: {
+        'api_access_token': accessToken,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      console.error('❌ Chatwoot contact search failed:', response.status);
+      return null;
+    }
+    
+    const data = await response.json();
+    const contacts = data.payload || [];
+    
+    if (contacts.length > 0) {
+      const contact = contacts[0];
+      console.log(`✅ Found contact in Chatwoot: ${contact.name || 'No name'} (${contact.phone_number})`);
+      
+      return {
+        name: contact.name,
+        phone_number: contact.phone_number,
+        id: contact.id,
+        email: contact.email
+      };
+    }
+    
+    console.log('⚠️  No contact found in Chatwoot');
+    return null;
+    
+  } catch (error) {
+    console.error('❌ Error searching Chatwoot contact:', error.message);
+    return null;
+  }
+}
+
 module.exports = {
   getPhoneNumberFromChatwoot,
   getContactById,
-  extractPhoneFromWhatsAppId
+  extractPhoneFromWhatsAppId,
+  searchChatwootContactByPhone
 };

@@ -9,6 +9,11 @@ module.exports = async (req, res) => {
       const responses = await getRecentResponses(50);
       const stats = await getStats();
       
+      console.log('📊 Sending response with', responses.length, 'items');
+      if (responses.length > 0) {
+        console.log('📋 Sample response structure:', JSON.stringify(responses[0], null, 2));
+      }
+      
       // getRecentResponses already returns the properly structured data
       return res.status(200).json({ 
         stats, 

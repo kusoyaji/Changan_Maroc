@@ -44,9 +44,9 @@ module.exports = async (req, res) => {
     // Format phone number (remove + if present, Meta expects without +)
     const formattedPhone = phoneNumber.replace('+', '');
     
-    // Store the flow_token -> phone_number mapping BEFORE sending
-    await storeFlowToken(flowToken, phoneNumber);
-    console.log(`✅ Stored flow token mapping: ${flowToken} -> ${phoneNumber}`);
+    // Store the flow_token -> phone_number + customer_name mapping BEFORE sending
+    await storeFlowToken(flowToken, phoneNumber, customerName || null);
+    console.log(`✅ Stored flow token mapping: ${flowToken} -> ${phoneNumber} (${customerName || 'No name'})`);
     
     // Send WhatsApp Flow
     const messageUrl = `https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages`;

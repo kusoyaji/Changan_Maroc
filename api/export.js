@@ -22,7 +22,7 @@ function formatValue(value) {
 
 function convertToCSV(data) {
   const headers = [
-    'ID', 'Date', 'Heure', 'Téléphone',
+    'ID', 'Date', 'Heure', 'Téléphone', 'Nom Client',
     'Q1 Accueil', 'Q1 Commentaire', 'Q2 Livraison', 'Q2 Commentaire',
     'Q3 Suivi 48h', 'Q4 Conseiller', 'Q4 Commentaire',
     'Q5 Marque Deepal', 'Q5 Commentaire', 'Remarques Finales',
@@ -35,6 +35,7 @@ function convertToCSV(data) {
     new Date(row.submission_timestamp || row.created_at).toLocaleDateString('fr-FR'),
     new Date(row.submission_timestamp || row.created_at).toLocaleTimeString('fr-FR'),
     row.phone_number || '',
+    row.customer_name || '',
     formatValue(row.q1_rating),
     row.q1_comment || '',
     formatValue(row.q2_rating),

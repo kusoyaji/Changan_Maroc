@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const fs = require('fs');
+const path = require('path');
 
 // Generate RSA key pair (2048-bit)
 const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
@@ -14,9 +15,10 @@ const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
   }
 });
 
-// Save keys
-fs.writeFileSync('public-key.pem', publicKey);
-fs.writeFileSync('private-key.pem', privateKey);
+// Save keys in the root directory
+const rootDir = path.join(__dirname, '..');
+fs.writeFileSync(path.join(rootDir, 'public-key.pem'), publicKey);
+fs.writeFileSync(path.join(rootDir, 'private-key.pem'), privateKey);
 
 console.log('RSA keys generated successfully!');
 console.log('\nPublic Key (upload to WhatsApp):');
