@@ -3,7 +3,7 @@
 # Customer name will be automatically captured from Chatwoot when user responds
 
 $vercelUrl = "https://changansurvey.vercel.app"
-$recipientPhone = "+212610015189"  # YOUR PHONE NUMBER
+$recipientPhone = "+212610059159"  # YOUR PHONE NUMBER
 
 Write-Host "Sending Flow with phone number storage..." -ForegroundColor Cyan
 Write-Host "Phone: $recipientPhone"
